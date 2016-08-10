@@ -2,6 +2,9 @@
 
 自用修改版Qt5.7.0
 
+这里是./qtbase/src目录下的内容。
+
+
 
 
 主要对QObject::connect进行修改
