@@ -379,7 +379,7 @@ QObjectList QObjectPrivate::senderList() const
 
   Will also add the connection in the sender's list of the receiver.
  */
-void QObjectPrivate::addConnection(int signal, Connection *c)
+void QObjectPrivate::addConnection(int signal, Connection *c, bool connectAtBegin)
 {
     Q_ASSERT(c->sender == q_ptr);
     if (!connectionLists)
@@ -388,20 +388,64 @@ void QObjectPrivate::addConnection(int signal, Connection *c)
         connectionLists->resize(signal + 1);
 
     ConnectionList &connectionList = (*connectionLists)[signal];
-    if (connectionList.last) {
-        connectionList.last->nextConnectionList = c;
-    } else {
-        connectionList.first = c;
-    }
-    connectionList.last = c;
+	if (connectAtBegin)
+	{
+		if (connectionList.first)
+			c->nextConnectionList = connectionList.first;
+		else
+			connectionList.last = c;
+		connectionList.first = c;
+	}
+	else
+	{
+		if (connectionList.last) {
+			connectionList.last->nextConnectionList = c;
+		}
+		else {
+			connectionList.first = c;
+		}
+		connectionList.last = c;
+	}
 
     cleanConnectionLists();
 
-    c->prev = &(QObjectPrivate::get(c->receiver)->senders);
-    c->next = *c->prev;
-    *c->prev = c;
-    if (c->next)
-        c->next->prev = &c->next;
+	// Receiver's 'senders' list goes along with 'next' member, and each 'prev' member is a pointer to the 'next' member of previous one ,
+	// The 'prev' of first connection points to 'senders'
+	// Receiver's 'senders' list, using 'next' member, and the Sender's list, using 'nextConnection' member, are in opposite direction
+	//
+	// Just like:
+	// (the 'nextConnection' below only when there is 1 sender and 1 receiver, in other condition, it's more complex)
+	//
+	// 'senders' ----> A        /----->B         /----->C
+	//  /`\             /------/         /------/ 
+	//   |             /                / 
+	//   |            next<----\      next<----\
+	//   |                      \-----\         \-----\
+	//   \                             \               \
+	//    \---------- prev            prev           prev
+	//
+	//               nextCon-        nextCon-       nextCon-                 
+	//               nection = null  nection = A    nection = B             
+	// In theory, when connectAtBegin == true, we can make same operation as when connectAtBegin == false
+	// But I think codes below are more appropriate...
+	if (connectAtBegin)
+	{
+		// put new connection at end
+		c->prev = &(QObjectPrivate::get(c->receiver)->senders);
+		while ((*c->prev))
+			c->prev = &(*c->prev)->next;
+		c->next = 0;
+		*c->prev = c;
+	}
+	else
+	{
+		// insert new connection at begin(it's default)
+		c->prev = &(QObjectPrivate::get(c->receiver)->senders);
+		c->next = *c->prev;
+		*c->prev = c;
+		if (c->next)
+			c->next->prev = &c->next;
+	}
 
     if (signal < 0) {
         connectedSignals[0] = connectedSignals[1] = ~0;
@@ -2631,8 +2675,14 @@ static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaM
     \sa disconnect(), sender(), qRegisterMetaType(), Q_DECLARE_METATYPE()
 */
 QMetaObject::Connection QObject::connect(const QObject *sender, const char *signal,
+	const QObject *receiver, const char *method,
+	Qt::ConnectionType type)
+{
+	return connect(sender, signal, receiver, method, type, Qt::ConnectAtEnd);
+}
+QMetaObject::Connection QObject::connect(const QObject *sender, const char *signal,
                                      const QObject *receiver, const char *method,
-                                     Qt::ConnectionType type)
+                                     Qt::ConnectionType type, Qt::ConnectionPosition position)
 {
     if (sender == 0 || receiver == 0 || signal == 0 || method == 0) {
         qWarning("QObject::connect: Cannot connect %s::%s to %s::%s",
@@ -2744,7 +2794,7 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     check_and_warn_compat(smeta, smethod, rmeta, rmethod);
 #endif
     QMetaObject::Connection handle = QMetaObject::Connection(QMetaObjectPrivate::connect(
-        sender, signal_index, smeta, receiver, method_index_relative, rmeta ,type, types));
+        sender, signal_index, smeta, receiver, method_index_relative, rmeta ,type, types, position == Qt::ConnectAtBegin));
     return handle;
 }
 
@@ -2769,8 +2819,15 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     \sa connect(const QObject *sender, const char *signal, const QObject *receiver, const char *method, Qt::ConnectionType type)
  */
 QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMethod &signal,
+										const QObject *receiver, const QMetaMethod &method,
+										Qt::ConnectionType type)
+{
+	return connect(sender, signal, receiver, method, type, Qt::ConnectAtEnd);
+}
+
+QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMethod &signal,
                                      const QObject *receiver, const QMetaMethod &method,
-                                     Qt::ConnectionType type)
+                                     Qt::ConnectionType type, Qt::ConnectionPosition position)
 {
     if (sender == 0
             || receiver == 0
@@ -2822,7 +2879,7 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMetho
     check_and_warn_compat(smeta, signal, rmeta, method);
 #endif
     QMetaObject::Connection handle = QMetaObject::Connection(QMetaObjectPrivate::connect(
-        sender, signal_index, signal.enclosingMetaObject(), receiver, method_index, 0, type, types));
+        sender, signal_index, signal.enclosingMetaObject(), receiver, method_index, 0, type, types, position == Qt::ConnectAtBegin));
     return handle;
 }
 
@@ -3243,7 +3300,8 @@ QMetaObject::Connection QMetaObject::connect(const QObject *sender, int signal_i
 QObjectPrivate::Connection *QMetaObjectPrivate::connect(const QObject *sender,
                                  int signal_index, const QMetaObject *smeta,
                                  const QObject *receiver, int method_index,
-                                 const QMetaObject *rmeta, int type, int *types)
+                                 const QMetaObject *rmeta, int type, int *types,
+                                 bool connectAtBegin)
 {
     QObject *s = const_cast<QObject *>(sender);
     QObject *r = const_cast<QObject *>(receiver);
@@ -3285,7 +3343,7 @@ QObjectPrivate::Connection *QMetaObjectPrivate::connect(const QObject *sender,
     c->nextConnectionList = 0;
     c->callFunction = callFunction;
 
-    QObjectPrivate::get(s)->addConnection(signal_index, c.data());
+    QObjectPrivate::get(s)->addConnection(signal_index, c.data(), connectAtBegin);
 
     locker.unlock();
     QMetaMethod smethod = QMetaObjectPrivate::signal(smeta, signal_index);
@@ -3635,27 +3693,40 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
     QMutexLocker locker(signalSlotLock(sender));
     struct ConnectionListsRef {
         QObjectConnectionListVector *connectionLists;
-        ConnectionListsRef(QObjectConnectionListVector *connectionLists) : connectionLists(connectionLists)
+		QList<QSemaphore*> * const & waiting;
+        ConnectionListsRef(QObjectConnectionListVector *connectionLists, QList<QSemaphore*> *& waiting)
+			:connectionLists(connectionLists), waiting(waiting)
         {
             if (connectionLists)
                 ++connectionLists->inUse;
         }
         ~ConnectionListsRef()
         {
-            if (!connectionLists)
-                return;
+			if (connectionLists) {
+				--connectionLists->inUse;
+				Q_ASSERT(connectionLists->inUse >= 0);
+				if (connectionLists->orphaned) {
+					if (!connectionLists->inUse)
+						delete connectionLists;
+				}
+			}
 
-            --connectionLists->inUse;
-            Q_ASSERT(connectionLists->inUse >= 0);
-            if (connectionLists->orphaned) {
-                if (!connectionLists->inUse)
-                    delete connectionLists;
-            }
+			if (waiting) {
+				for (int i = 0; i < waiting->size(); ++i) {
+					QSemaphore * semaphore = waiting->at(i);
+					semaphore->acquire();
+					delete semaphore;
+				}
+				delete waiting;
+			}
         }
 
         QObjectConnectionListVector *operator->() const { return connectionLists; }
     };
-    ConnectionListsRef connectionLists = sender->d_func()->connectionLists;
+
+	QList<QSemaphore*> * waiting = 0;
+
+    ConnectionListsRef connectionLists(sender->d_func()->connectionLists, waiting);
     if (!connectionLists.connectionLists) {
         locker.unlock();
         if (qt_signal_spy_callback_set.signal_end_callback != 0)
@@ -3687,11 +3758,29 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
 
             // determine if this connection should be sent immediately or
             // put into the event queue
-            if ((c->connectionType == Qt::AutoConnection && !receiverInSameThread)
-                || (c->connectionType == Qt::QueuedConnection)) {
-                queued_activate(sender, signal_index, c, argv ? argv : empty_argv, locker);
-                continue;
+			if ((c->connectionType == Qt::AutoConnection && !receiverInSameThread)
+				|| (c->connectionType == Qt::QueuedConnection)) {
+				queued_activate(sender, signal_index, c, argv ? argv : empty_argv, locker);
+				continue;
 #ifndef QT_NO_THREAD
+			} else if (c->connectionType == Qt::ParallelBlockingQueuedConnection) {
+				locker.unlock();
+				if (receiverInSameThread) {
+					qWarning("Qt: Dead lock detected while activating a ParallelBlockingQueuedConnection: "
+						"Sender is %s(%p), receiver is %s(%p)",
+						sender->metaObject()->className(), sender,
+						receiver->metaObject()->className(), receiver);
+				}
+				QSemaphore * semaphore = new QSemaphore();
+				QMetaCallEvent *ev = c->isSlotObject ?
+					new QMetaCallEvent(c->slotObj, sender, signal_index, 0, 0, argv ? argv : empty_argv, semaphore) :
+					new QMetaCallEvent(c->method_offset, c->method_relative, c->callFunction, sender, signal_index, 0, 0, argv ? argv : empty_argv, semaphore);
+				QCoreApplication::postEvent(receiver, ev);
+				if (!waiting)
+					waiting = new QList<QSemaphore*>();
+				waiting->append(semaphore);
+				locker.relock();
+				continue;
             } else if (c->connectionType == Qt::BlockingQueuedConnection) {
                 locker.unlock();
                 if (receiverInSameThread) {
@@ -4646,9 +4735,18 @@ void qDeleteInEventHandler(QObject *o)
     \a senderMetaObject is the metaobject used to lookup the signal, the signal must be in
                         this metaobject
  */
+
+QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signal,
+	const QObject *receiver, void **slot,
+	QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
+	const int *types, const QMetaObject *senderMetaObject)
+{
+	return connectImpl(sender, signal, receiver, slot, slotObj, type, Qt::ConnectAtEnd, types, senderMetaObject);
+}
+
 QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signal,
                                              const QObject *receiver, void **slot,
-                                             QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
+                                             QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type, Qt::ConnectionPosition position,
                                              const int *types, const QMetaObject *senderMetaObject)
 {
     if (!signal) {
@@ -4671,7 +4769,7 @@ QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signa
         return QMetaObject::Connection(0);
     }
     signal_index += QMetaObjectPrivate::signalOffset(senderMetaObject);
-    return QObjectPrivate::connectImpl(sender, signal_index, receiver, slot, slotObj, type, types, senderMetaObject);
+    return QObjectPrivate::connectImpl(sender, signal_index, receiver, slot, slotObj, type, position, types, senderMetaObject);
 }
 
 /*!
@@ -4681,9 +4779,10 @@ QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signa
     also used by the QObjectPrivate::connect version used by QML. The signal_index is expected to be relative
     to the number of signals.
  */
+
 QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int signal_index,
                                              const QObject *receiver, void **slot,
-                                             QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
+                                             QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type, Qt::ConnectionPosition position,
                                              const int *types, const QMetaObject *senderMetaObject)
 {
     if (!sender || !slotObj || !senderMetaObject) {
@@ -4728,7 +4827,7 @@ QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int s
         c->ownArgumentTypes = false;
     }
 
-    QObjectPrivate::get(s)->addConnection(signal_index, c.data());
+    QObjectPrivate::get(s)->addConnection(signal_index, c.data(), position == Qt::ConnectAtBegin);
     QMetaObject::Connection ret(c.take());
     locker.unlock();
 
@@ -4886,7 +4985,7 @@ QMetaObject::Connection QObjectPrivate::connect(const QObject *sender, int signa
     const QMetaObject *senderMetaObject = sender->metaObject();
     signal_index = methodIndexToSignalIndex(&senderMetaObject, signal_index);
 
-    return QObjectPrivate::connectImpl(sender, signal_index, sender, /*slot*/0, slotObj, type, /*types*/0, senderMetaObject);
+    return QObjectPrivate::connectImpl(sender, signal_index, sender, /*slot*/0, slotObj, type, Qt::ConnectAtEnd, /*types*/0, senderMetaObject);
 }
 
 /*!

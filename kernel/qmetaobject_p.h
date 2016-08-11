@@ -224,7 +224,8 @@ struct QMetaObjectPrivate
                         const QMetaObject *smeta,
                         const QObject *receiver, int method_index_relative,
                         const QMetaObject *rmeta = 0,
-                        int type = 0, int *types = 0);
+                        int type = 0, int *types = 0,
+						bool connectAtBegin = false);
     static bool disconnect(const QObject *sender, int signal_index,
                            const QMetaObject *smeta,
                            const QObject *receiver, int method_index, void **slot,

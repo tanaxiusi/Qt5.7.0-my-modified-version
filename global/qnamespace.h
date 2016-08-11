@@ -1253,8 +1253,14 @@ public:
         DirectConnection,
         QueuedConnection,
         BlockingQueuedConnection,
+		ParallelBlockingQueuedConnection, //like BlockingQueuedConnection, but the receivers will begin together
         UniqueConnection =  0x80
     };
+
+	enum ConnectionPosition {
+		ConnectAtEnd = 0, // default
+		ConnectAtBegin
+	};
 
     enum ShortcutContext {
         WidgetShortcut,

@@ -185,7 +185,7 @@ public:
     QObjectList receiverList(const char *signal) const;
     QObjectList senderList() const;
 
-    void addConnection(int signal, Connection *c);
+    void addConnection(int signal, Connection *c, bool connectAtBegin);
     void cleanConnectionLists();
 
     static inline Sender *setCurrentSender(QObject *receiver,
@@ -218,7 +218,7 @@ public:
 
     static QMetaObject::Connection connectImpl(const QObject *sender, int signal_index,
                                                const QObject *receiver, void **slot,
-                                               QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
+                                               QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type, Qt::ConnectionPosition position,
                                                const int *types, const QMetaObject *senderMetaObject);
     static QMetaObject::Connection connect(const QObject *sender, int signal_index, QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type);
     static bool disconnect(const QObject *sender, int signal_index, void **slot);

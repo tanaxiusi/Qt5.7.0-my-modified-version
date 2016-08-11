@@ -199,15 +199,40 @@ public:
     void installEventFilter(QObject *filterObj);
     void removeEventFilter(QObject *obj);
 
+#ifdef QT_BUILDING_QT
+
     static QMetaObject::Connection connect(const QObject *sender, const char *signal,
-                        const QObject *receiver, const char *member, Qt::ConnectionType = Qt::AutoConnection);
+                        const QObject *receiver, const char *member, Qt::ConnectionType type = Qt::AutoConnection);
 
     static QMetaObject::Connection connect(const QObject *sender, const QMetaMethod &signal,
-                        const QObject *receiver, const QMetaMethod &method,
-                        Qt::ConnectionType type = Qt::AutoConnection);
+                        const QObject *receiver, const QMetaMethod &method, Qt::ConnectionType type = Qt::AutoConnection);
 
-    inline QMetaObject::Connection connect(const QObject *sender, const char *signal,
+	inline QMetaObject::Connection connect(const QObject *sender, const char *signal,
                         const char *member, Qt::ConnectionType type = Qt::AutoConnection) const;
+
+	static QMetaObject::Connection connect(const QObject *sender, const char *signal,
+		const QObject *receiver, const char *member, Qt::ConnectionType type, Qt::ConnectionPosition position);
+
+	static QMetaObject::Connection connect(const QObject *sender, const QMetaMethod &signal,
+		const QObject *receiver, const QMetaMethod &method,
+		Qt::ConnectionType type, Qt::ConnectionPosition position);
+
+	inline QMetaObject::Connection connect(const QObject *sender, const char *signal,
+		const char *member, Qt::ConnectionType type, Qt::ConnectionPosition position) const;
+#else
+
+	static QMetaObject::Connection connect(const QObject *sender, const char *signal,
+		const QObject *receiver, const char *member, Qt::ConnectionType type = Qt::AutoConnection,
+		Qt::ConnectionPosition position = Qt::ConnectAtEnd);
+
+	static QMetaObject::Connection connect(const QObject *sender, const QMetaMethod &signal,
+		const QObject *receiver, const QMetaMethod &method,
+		Qt::ConnectionType type = Qt::AutoConnection, Qt::ConnectionPosition position = Qt::ConnectAtEnd);
+
+	inline QMetaObject::Connection connect(const QObject *sender, const char *signal,
+        const char *member, Qt::ConnectionType type = Qt::AutoConnection,
+		Qt::ConnectionPosition position = Qt::ConnectAtEnd) const;
+#endif
 
 #ifdef Q_QDOC
     static QMetaObject::Connection connect(const QObject *sender, PointerToMemberFunction signal, const QObject *receiver, PointerToMemberFunction method, Qt::ConnectionType type = Qt::AutoConnection);
@@ -218,7 +243,11 @@ public:
     template <typename Func1, typename Func2>
     static inline QMetaObject::Connection connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal,
                                      const typename QtPrivate::FunctionPointer<Func2>::Object *receiver, Func2 slot,
-                                     Qt::ConnectionType type = Qt::AutoConnection)
+                                     Qt::ConnectionType type = Qt::AutoConnection
+#ifndef QT_BUILDING_QT
+                                     ,Qt::ConnectionPosition position = Qt::ConnectAtEnd
+#endif
+	)
     {
         typedef QtPrivate::FunctionPointer<Func1> SignalType;
         typedef QtPrivate::FunctionPointer<Func2> SlotType;
@@ -242,15 +271,27 @@ public:
                            receiver, reinterpret_cast<void **>(&slot),
                            new QtPrivate::QSlotObject<Func2, typename QtPrivate::List_Left<typename SignalType::Arguments, SlotType::ArgumentCount>::Value,
                                            typename SignalType::ReturnType>(slot),
-                            type, types, &SignalType::Object::staticMetaObject);
+                            type,
+#ifndef QT_BUILDING_QT
+                            position,
+#endif
+                            types, &SignalType::Object::staticMetaObject);
     }
 
     //connect to a function pointer  (not a member)
     template <typename Func1, typename Func2>
     static inline typename QtPrivate::QEnableIf<int(QtPrivate::FunctionPointer<Func2>::ArgumentCount) >= 0, QMetaObject::Connection>::Type
-            connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, Func2 slot)
+            connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, Func2 slot
+#ifndef QT_BUILDING_QT
+            , Qt::ConnectionPosition position = Qt::ConnectAtEnd
+#endif
+			)
     {
-        return connect(sender, signal, sender, slot, Qt::DirectConnection);
+        return connect(sender, signal, sender, slot, Qt::DirectConnection
+#ifndef QT_BUILDING_QT
+			, position
+#endif
+		);
     }
 
     //connect to a function pointer  (not a member)
@@ -258,7 +299,11 @@ public:
     static inline typename QtPrivate::QEnableIf<int(QtPrivate::FunctionPointer<Func2>::ArgumentCount) >= 0 &&
                                                 !QtPrivate::FunctionPointer<Func2>::IsPointerToMemberFunction, QMetaObject::Connection>::Type
             connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, const QObject *context, Func2 slot,
-                    Qt::ConnectionType type = Qt::AutoConnection)
+                    Qt::ConnectionType type = Qt::AutoConnection
+#ifndef QT_BUILDING_QT
+					, Qt::ConnectionPosition position = Qt::ConnectAtEnd
+#endif
+			)
     {
         typedef QtPrivate::FunctionPointer<Func1> SignalType;
         typedef QtPrivate::FunctionPointer<Func2> SlotType;
@@ -282,22 +327,38 @@ public:
                            new QtPrivate::QStaticSlotObject<Func2,
                                                  typename QtPrivate::List_Left<typename SignalType::Arguments, SlotType::ArgumentCount>::Value,
                                                  typename SignalType::ReturnType>(slot),
-                           type, types, &SignalType::Object::staticMetaObject);
+                           type,
+#ifndef QT_BUILDING_QT
+                           position,
+#endif
+                           types, &SignalType::Object::staticMetaObject);
     }
 
     //connect to a functor
     template <typename Func1, typename Func2>
     static inline typename QtPrivate::QEnableIf<QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1, QMetaObject::Connection>::Type
-            connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, Func2 slot)
+            connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, Func2 slot
+#ifndef QT_BUILDING_QT
+				, Qt::ConnectionPosition position = Qt::ConnectAtEnd
+#endif
+			)
     {
-        return connect(sender, signal, sender, slot, Qt::DirectConnection);
+        return connect(sender, signal, sender, slot, Qt::DirectConnection
+#ifndef QT_BUILDING_QT
+			, position
+#endif
+		);
     }
 
     //connect to a functor, with a "context" object defining in which event loop is going to be executed
     template <typename Func1, typename Func2>
     static inline typename QtPrivate::QEnableIf<QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1, QMetaObject::Connection>::Type
             connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, const QObject *context, Func2 slot,
-                    Qt::ConnectionType type = Qt::AutoConnection)
+                    Qt::ConnectionType type = Qt::AutoConnection
+#ifndef QT_BUILDING_QT
+				, Qt::ConnectionPosition position = Qt::ConnectAtEnd
+#endif
+			)
     {
 #if defined (Q_COMPILER_VARIADIC_TEMPLATES)
         typedef QtPrivate::FunctionPointer<Func1> SignalType;
@@ -344,7 +405,11 @@ public:
                            new QtPrivate::QFunctorSlotObject<Func2, SlotArgumentCount,
                                 typename QtPrivate::List_Left<typename SignalType::Arguments, SlotArgumentCount>::Value,
                                 typename SignalType::ReturnType>(slot),
-                           type, types, &SignalType::Object::staticMetaObject);
+                           type,
+#ifndef QT_BUILDING_QT
+                           position,
+#endif
+                           types, &SignalType::Object::staticMetaObject);
     }
 #endif //Q_QDOC
 
@@ -465,14 +530,29 @@ private:
                                                QtPrivate::QSlotObjectBase *slot, Qt::ConnectionType type,
                                                const int *types, const QMetaObject *senderMetaObject);
 
+	static QMetaObject::Connection connectImpl(const QObject *sender, void **signal,
+                                               const QObject *receiver, void **slotPtr,
+                                               QtPrivate::QSlotObjectBase *slot, Qt::ConnectionType type, Qt::ConnectionPosition position,
+                                               const int *types, const QMetaObject *senderMetaObject);
+
     static bool disconnectImpl(const QObject *sender, void **signal, const QObject *receiver, void **slot,
                                const QMetaObject *senderMetaObject);
 
 };
 
+#ifdef QT_BUILDING_QT
 inline QMetaObject::Connection QObject::connect(const QObject *asender, const char *asignal,
-                                            const char *amember, Qt::ConnectionType atype) const
-{ return connect(asender, asignal, this, amember, atype); }
+	const char *amember, Qt::ConnectionType atype) const
+{
+	return connect(asender, asignal, this, amember, atype, Qt::ConnectAtEnd);
+}
+#endif
+
+inline QMetaObject::Connection QObject::connect(const QObject *asender, const char *asignal,
+	const char *amember, Qt::ConnectionType atype, Qt::ConnectionPosition aposition) const
+{
+	return connect(asender, asignal, this, amember, atype, aposition);
+}
 
 #ifndef QT_NO_USERDATA
 class Q_CORE_EXPORT QObjectUserData {
