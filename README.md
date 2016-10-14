@@ -22,10 +22,51 @@
     };
     
 ####ConnectionType增加了一种类型ParallelBlockingQueuedConnection，与BlockingQueuedConnection类似；但不同的是，ParallelBlockingQueuedConnection连接的槽会被同时调用，然后等到所有槽函数执行完毕后，再返回。
+    void A::mySlot()
+    {
+        msleep(1000);
+        qDebug() << "print A";
+    }
+    void B::mySlot()
+    {
+        msleep(300);
+        qDebug() << "print B";
+    }
+    connect(sender, SIGNAL(mySignal()), A, SLOT(mySlot()), Qt::ParallelBlockingQueuedConnection);
+    connect(sender, SIGNAL(mySignal()), B, SLOT(mySlot()), Qt::ParallelBlockingQueuedConnection);
+
+    qDebug() << "begin";
+    emit sender.mySignal();
+    qDebug() << "end";
+
+    输出结果为：
+    begin
+    (300ms)
+    print B
+    (700ms)
+    print A
+    end
+    
 ####增加了一个枚举类型ConnectionPosition。我们知道原版Qt对于连接到同一个信号上的槽，遵循“先连接先调用”的原则，ConnectionPosition.ConnectAtBegin可以让某个槽“插队”，得到优先调用。
-    例：
-    connect(sender, SIGNAL(xxx), A, SLOT(xxx), Qt::AutoConnection);                             // 默认连接位置，即ConnectAtBegin
-    connect(sender, SIGNAL(xxx), B, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);         // B插队到最前
-    connect(sender, SIGNAL(xxx), C, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);         // C插队到最前
+    connect(sender, SIGNAL(xxx), A, SLOT(xxx), Qt::AutoConnection);                         // 默认连接位置，即ConnectAtEnd
+    connect(sender, SIGNAL(xxx), B, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);     // B插队到最前
+    connect(sender, SIGNAL(xxx), C, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);     // C插队到最前
     这种情况下，信号触发时，ABC的调用顺序为C->B->A
     
+
+#使用方法
+下载源代码
+Windows : http://download.qt.io/official_releases/qt/5.7/5.7.0/single/qt-everywhere-opensource-src-5.7.0.zip
+Linux : http://download.qt.io/official_releases/qt/5.7/5.7.0/single/qt-everywhere-opensource-src-5.7.0.tar.gz
+把这个项目的文件覆盖到qtbase/src/corelib目录，编译。
+
+#版本兼容性
+####修改版在代码级、二进制级向下兼容原版，反过来不行。
+####使用修改版源码编译的二进制文件中，仅QtCore与原版不同(多了几个导出符号)，其他模块(QtGui、QtWidgets等)理论上与原版完全相同。
+    
+    编译链接所用的版本       程序可以在原版上运行      程序可以在修改版上运行
+    原版                    √                       √
+    修改版                  ×                       √
+    
+    如果试图用原版dll/so上运行使用修改版编译的程序，会因为找不到专有的导出符号而出错。
+    Windows会弹出错误提示框，而Linux会在第一次运行到QObject::connect时崩溃。
