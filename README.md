@@ -51,19 +51,21 @@
     connect(sender, SIGNAL(xxx), A, SLOT(xxx), Qt::AutoConnection);                         // 默认连接位置，即ConnectAtEnd
     connect(sender, SIGNAL(xxx), B, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);     // B插队到最前
     connect(sender, SIGNAL(xxx), C, SLOT(xxx), Qt::AutoConnection, Qt::ConnectAtBegin);     // C插队到最前
-    这种情况下，信号触发时，ABC的调用顺序为C->B->A
+    这种情况下，信号触发时，ABC的调用顺序为C->B->A。
     
 
 #使用方法
-下载源代码
+####下载源代码
 Windows : http://download.qt.io/official_releases/qt/5.7/5.7.0/single/qt-everywhere-opensource-src-5.7.0.zip
+
 Linux : http://download.qt.io/official_releases/qt/5.7/5.7.0/single/qt-everywhere-opensource-src-5.7.0.tar.gz
+
 把这个项目的文件覆盖到qtbase/src/corelib目录，编译。
 
 #版本兼容性
 ####修改版在代码级、二进制级向下兼容原版。
 ####反过来，如果代码中没有用到修改版的新特性，就可以在原版上编译（必须的）；`但是，无论是否用到新特性，使用修改版编译完成的程序都无法在原版上运行`。
-####使用修改版源码编译的二进制文件中，仅QtCore与原版不同(多了几个导出符号)，其他模块(QtGui、QtWidgets等)理论上与原版完全相同。
+####使用修改版源码编译的二进制文件中，仅QtCore与原版不同(多了几个导出符号)，其他模块(QtGui、QtWidgets等)理论上与原版完全相同，可以随意混用。
     
     编译链接所用的版本       程序可以在原版上运行      程序可以在修改版上运行
     原版                    √                       √
